@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: stayspot
+      POSTGRES_PASSWORD: stayspot
+      POSTGRES_DB: stayspot
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

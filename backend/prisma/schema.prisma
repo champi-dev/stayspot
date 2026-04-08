@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───
+
+enum PropertyType {
+  ENTIRE_PLACE
+  PRIVATE_ROOM
+  SHARED_ROOM
+  HOTEL_ROOM
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// ─── MODELS ───
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  avatarUrl     String?
+  bio           String?
+  phone         String?
+  isHost        Boolean   @default(false)
+  isSuperhost   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  listings      Listing[]
+  bookings      Booking[]
+  reviews       Review[]
+  wishlists     Wishlist[]
+  sentMessages  Message[] @relation("sender")
+  conversations ConversationParticipant[]
+}
+
+model Location {
+  id            String    @id @default(uuid())
+  placeId       String    @unique
+  name          String
+  country       String
+  latitude      Float
+  longitude     Float
+  generatedAt   DateTime  @default(now())
+  listings      Listing[]
+}
+
+model Listing {
+  id                  String    @id @default(uuid())
+  title               String
+  description         String
+  propertyType        PropertyType
+  pricePerNight       Float
+  cleaningFee         Float     @default(25)
+  serviceFee          Float     @default(15)
+  maxGuests           Int
+  bedrooms            Int
+  beds                Int
+  bathrooms           Float
+  amenities           String[]
+  houseRules          String[]
+  checkInTime         String    @default("15:00")
+  checkOutTime        String    @default("11:00")
+  neighborhoodDesc    String?
+  latitude            Float
+  longitude           Float
+  averageRating       Float     @default(0)
+  reviewCount         Int       @default(0)
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  hostId              String
+  host                User      @relation(fields: [hostId], references: [id])
+  locationId          String
+  location            Location  @relation(fields: [locationId], references: [id])
+  images              ListingImage[]
+  bookings            Booking[]
+  reviews             Review[]
+  wishlists           WishlistListing[]
+}
+
+model ListingImage {
+  id         String  @id @default(uuid())
+  url        String
+  caption    String?
+  sortOrder  Int     @default(0)
+  listingId  String
+  listing    Listing @relation(fields: [listingId], references: [id])
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  checkIn       DateTime
+  checkOut      DateTime
+  guests        Int
+  totalPrice    Float
+  status        BookingStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  guestId       String
+  guest         User          @relation(fields: [guestId], references: [id])
+  listingId     String
+  listing       Listing       @relation(fields: [listingId], references: [id])
+}
+
+model Review {
+  id            String   @id @default(uuid())
+  rating        Float
+  comment       String
+  cleanliness   Float
+  accuracy      Float
+  checkIn       Float
+  communication Float
+  location      Float
+  value         Float
+  createdAt     DateTime @default(now())
+  authorId      String
+  author        User     @relation(fields: [authorId], references: [id])
+  listingId     String
+  listing       Listing  @relation(fields: [listingId], references: [id])
+}
+
+model Wishlist {
+  id        String            @id @default(uuid())
+  name      String
+  userId    String
+  user      User              @relation(fields: [userId], references: [id])
+  listings  WishlistListing[]
+}
+
+model WishlistListing {
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id])
+  listingId  String
+  listing    Listing  @relation(fields: [listingId], references: [id])
+  @@id([wishlistId, listingId])
+}
+
+model Conversation {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  @@id([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  content        String
+  createdAt      DateTime     @default(now())
+  isRead         Boolean      @default(false)
+  senderId       String
+  sender         User         @relation("sender", fields: [senderId], references: [id])
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model PreseededImage {
+  id        String @id @default(uuid())
+  category  String
+  filename  String
+  path      String
+}
