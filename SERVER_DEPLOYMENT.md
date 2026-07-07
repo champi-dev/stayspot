@@ -5,6 +5,7 @@ The API is deployed as part of the champi docker-compose stack.
 | | |
 |---|---|
 | Compose services | `stayspot-backend` + `stayspot-db` |
+| Public base URL | `https://stayspot.champi.lat` |
 | Local base URL | `http://127.0.0.1:8093` (API prefix `/api/v1`) |
 | Stack | Express + TypeScript (compiled), Prisma |
 | Database | dedicated `stayspot-db` container — **PostGIS** (postgis/postgis:16-3.4), volume `stayspot_pgdata` |
