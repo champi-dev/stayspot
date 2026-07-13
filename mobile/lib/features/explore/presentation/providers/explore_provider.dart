@@ -8,12 +8,14 @@ class FilterState {
   final double maxPrice;
   final String? propertyType;
   final int guests;
+  final List<String> amenities;
 
   const FilterState({
     this.minPrice = 0,
     this.maxPrice = 500,
     this.propertyType,
     this.guests = 1,
+    this.amenities = const [],
   });
 }
 
@@ -136,6 +138,7 @@ class ExploreNotifier extends StateNotifier<ExploreState> {
         maxPrice: state.filters.maxPrice < 500 ? state.filters.maxPrice : null,
         propertyType: state.filters.propertyType,
         guests: state.filters.guests > 1 ? state.filters.guests : null,
+        amenities: state.filters.amenities.isNotEmpty ? state.filters.amenities : null,
       );
       state = state.copyWith(listings: result.listings);
     } catch (_) {}
@@ -147,12 +150,14 @@ class ExploreNotifier extends StateNotifier<ExploreState> {
     double maxPrice = 500,
     String? propertyType,
     int guests = 1,
+    List<String> amenities = const [],
   }) async {
     final newFilters = FilterState(
       minPrice: minPrice,
       maxPrice: maxPrice,
       propertyType: propertyType,
       guests: guests,
+      amenities: amenities,
     );
     state = state.copyWith(isLoading: true, error: null, filters: newFilters);
     try {
@@ -162,6 +167,7 @@ class ExploreNotifier extends StateNotifier<ExploreState> {
         maxPrice: maxPrice < 500 ? maxPrice : null,
         propertyType: propertyType,
         guests: guests > 1 ? guests : null,
+        amenities: amenities.isNotEmpty ? amenities : null,
       );
       state = state.copyWith(listings: result.listings, isLoading: false);
     } catch (e) {

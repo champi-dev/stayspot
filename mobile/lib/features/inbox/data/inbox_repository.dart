@@ -10,14 +10,17 @@ class InboxRepository {
         .toList();
   }
 
-  Future<List<MessageModel>> getMessages(String conversationId, {int page = 1}) async {
+  Future<MessagesResult> getMessages(String conversationId, {int page = 1}) async {
     final response = await _api.dio.get(
       '/conversations/$conversationId/messages',
       queryParameters: {'page': page, 'limit': 50},
     );
-    return (response.data['messages'] as List)
-        .map((e) => MessageModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return MessagesResult(
+      messages: (response.data['messages'] as List)
+          .map((e) => MessageModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      hostTyping: response.data['hostTyping'] as bool? ?? false,
+    );
   }
 
   Future<MessageModel> sendMessage(String conversationId, String content) async {
@@ -35,6 +38,13 @@ class InboxRepository {
     });
     return response.data['conversationId'] as String;
   }
+}
+
+class MessagesResult {
+  final List<MessageModel> messages;
+  final bool hostTyping;
+
+  const MessagesResult({required this.messages, this.hostTyping = false});
 }
 
 class ConversationModel {

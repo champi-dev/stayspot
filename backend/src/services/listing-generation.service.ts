@@ -1,9 +1,9 @@
 import { PrismaClient, PropertyType } from '@prisma/client';
 import { z } from 'zod';
+import { chatCompletion, extractJson, NO_THINK } from '../config/ai';
+import { generateListingImages, imagesEnabled } from './listing-images.service';
 
 const prisma = new PrismaClient();
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
 const generatedListingSchema = z.object({
   title: z.string(),
@@ -69,10 +69,17 @@ async function saveListing(
   lng: number,
   hostIds: string[],
   imagesByCategory: Map<string, any[]>,
+  usedImagePaths: Set<string>,
 ) {
   const category = getImageCategory(listing.title, listing.description);
   const catImages = imagesByCategory.get(category) || imagesByCategory.get('modern-apartment') || [];
-  const selectedImages = catImages.slice(0, 6);
+  // Shuffle and avoid images already used by this batch so listings
+  // don't all share the same photos
+  const fresh = catImages.filter((img) => !usedImagePaths.has(img.path));
+  const pool = fresh.length >= 4 ? fresh : catImages;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const selectedImages = shuffled.slice(0, 5);
+  selectedImages.forEach((img) => usedImagePaths.add(img.path));
 
   const rating = Math.round((Math.random() * 1.0 + 4.0) * 10) / 10;
   const latOffset = (Math.random() - 0.5) * 0.06;
@@ -107,17 +114,18 @@ async function saveListing(
     },
   });
 
+  // Unique photos via Leonardo Nano Banana, replacing preseeded ones (background)
+  if (imagesEnabled()) {
+    generateListingImages(created.id, listing.title, listing.description, locationName)
+      .catch(err => console.error('Image gen failed:', err));
+  }
+
   // Reviews in background
   const reviewCount = Math.floor(Math.random() * 3) + 2;
   const reviewerUsers = await prisma.user.findMany({ where: { isHost: false }, select: { id: true }, take: 8 });
   const reviewerIds = reviewerUsers.length > 0 ? reviewerUsers.map(u => u.id) : [hostId];
-  if (OPENAI_API_KEY && OPENAI_API_KEY !== 'sk-placeholder') {
-    generateReviewsViaOpenAI(created.id, reviewerIds, listing.title, locationName, listing.propertyType, rating, reviewCount)
-      .catch(err => console.error('Review gen failed:', err));
-  } else {
-    generateFallbackReviews(created.id, reviewerIds, rating, reviewCount)
-      .catch(err => console.error('Review gen failed:', err));
-  }
+  generateReviewsViaAI(created.id, reviewerIds, listing.title, locationName, listing.propertyType, rating, reviewCount)
+    .catch(err => console.error('Review gen failed:', err));
 }
 
 export async function generateListingsForLocation(
@@ -129,30 +137,33 @@ export async function generateListingsForLocation(
   hostIds: string[],
 ): Promise<void> {
   const imagesByCategory = await getImageMap();
-  const useAI = OPENAI_API_KEY && OPENAI_API_KEY !== 'sk-placeholder';
+  const usedImagePaths = new Set<string>();
 
-  if (!useAI) {
-    // Fallback: generate all at once (fast, no API calls)
-    const listings = generateFallbackListings(locationName, country, 8);
-    await Promise.all(listings.map(l =>
-      saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory)
-    ));
-    return;
+  // FAST PATH: 5 listings for a quick first response (qwen3 local, with
+  // hand-written fallback if the model output is unusable)
+  console.log(`[Gen] Fast batch: 5 listings for ${locationName}...`);
+  let fastListings: z.infer<typeof generatedListingSchema>[];
+  try {
+    fastListings = await generateViaAI(locationName, country, 5);
+  } catch (err) {
+    console.error('[Gen] AI generation failed, using fallback:', err);
+    fastListings = [];
   }
-
-  // FAST PATH: Generate 3 listings first for quick response
-  console.log(`[Gen] Fast batch: 3 listings for ${locationName}...`);
-  const fastListings = await generateViaOpenAI(locationName, country, 3);
+  if (fastListings.length < 5) {
+    fastListings = fastListings.concat(
+      generateFallbackListings(locationName, country, 5 - fastListings.length),
+    );
+  }
   await Promise.all(fastListings.map(l =>
-    saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory)
+    saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory, usedImagePaths)
   ));
   console.log(`[Gen] Fast batch done. Queuing background batch...`);
 
-  // BACKGROUND: Generate 5 more listings without blocking the response
-  generateViaOpenAI(locationName, country, 5).then(async (moreListings) => {
+  // BACKGROUND: 3 more listings without blocking the response
+  generateViaAI(locationName, country, 3).then(async (moreListings) => {
     console.log(`[Gen] Background batch: ${moreListings.length} more for ${locationName}`);
     await Promise.all(moreListings.map(l =>
-      saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory)
+      saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory, usedImagePaths)
     ));
     console.log(`[Gen] Background batch complete for ${locationName}`);
   }).catch(err => {
@@ -160,7 +171,7 @@ export async function generateListingsForLocation(
   });
 }
 
-async function generateViaOpenAI(
+async function generateViaAI(
   locationName: string,
   country: string,
   count: number,
@@ -194,31 +205,26 @@ JSON schema for each listing:
   "hostBio": string (1-2 sentences)
 }`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.8,
-    }),
-  });
+  const content = await chatCompletion(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt + NO_THINK },
+    ],
+    { temperature: 0.8, maxTokens: 3000 },
+  );
 
-  const data: any = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('No content from OpenAI');
-
-  const parsed = JSON.parse(content);
-  return z.array(generatedListingSchema).parse(parsed);
+  const parsed = extractJson<unknown[]>(content);
+  // Tolerate partially-valid output from the small model: keep what parses
+  const valid: z.infer<typeof generatedListingSchema>[] = [];
+  for (const item of Array.isArray(parsed) ? parsed : []) {
+    const r = generatedListingSchema.safeParse(item);
+    if (r.success) valid.push(r.data);
+  }
+  if (valid.length === 0) throw new Error('No valid listings from AI');
+  return valid;
 }
 
-async function generateReviewsViaOpenAI(
+async function generateReviewsViaAI(
   listingId: string,
   reviewerIds: string[],
   title: string,
@@ -245,24 +251,18 @@ Each review JSON:
 Respond ONLY with a valid JSON array.`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.8,
-      }),
-    });
+    const content = await chatCompletion(
+      [{ role: 'user', content: prompt + NO_THINK }],
+      { temperature: 0.8, maxTokens: 1500 },
+    );
 
-    const data: any = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error('No review content');
-
-    const reviews = z.array(generatedReviewSchema).parse(JSON.parse(content));
+    const parsed = extractJson<unknown[]>(content);
+    const reviews: z.infer<typeof generatedReviewSchema>[] = [];
+    for (const item of Array.isArray(parsed) ? parsed : []) {
+      const r = generatedReviewSchema.safeParse(item);
+      if (r.success) reviews.push(r.data);
+    }
+    if (reviews.length === 0) throw new Error('No valid reviews from AI');
     for (const review of reviews) {
       await prisma.review.create({
         data: {

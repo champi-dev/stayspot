@@ -2,8 +2,13 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { z } from 'zod';
+import { chatCompletion, NO_THINK } from '../config/ai';
 
 const prisma = new PrismaClient();
+
+// Conversations with an auto-reply in flight — lets the client show a
+// "host is typing…" indicator while the LLM generates the response.
+const pendingReplies = new Map<string, number>();
 
 const startConversationSchema = z.object({
   recipientId: z.string().uuid(),
@@ -13,13 +18,6 @@ const startConversationSchema = z.object({
 const sendMessageSchema = z.object({
   content: z.string().min(1),
 });
-
-// Any OpenAI-compatible chat completions API — defaults to local
-// Ollama running qwen3:1.7b. Point AI_BASE_URL at api.openai.com/v1
-// and set AI_API_KEY to use a hosted model instead.
-const AI_BASE_URL = (process.env.AI_BASE_URL || 'http://localhost:11434/v1').replace(/\/$/, '');
-const AI_MODEL = process.env.AI_MODEL || 'qwen3:1.7b';
-const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || 'ollama';
 
 const CANNED_REPLIES = [
   "Thanks for reaching out! I'd be happy to help. The place is available for those dates.",
@@ -44,35 +42,20 @@ async function generateAIReply(conversationId: string, guestMessage: string, hos
   ).join('\n');
 
   try {
-    const response = await fetch(`${AI_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `You are ${hostName}, a friendly and helpful Airbnb host. Reply to the guest's message naturally and helpfully. Keep responses short (1-3 sentences). Be warm, welcoming, and specific. Don't use emojis excessively. /no_think`,
-          },
-          {
-            role: 'user',
-            content: `Conversation so far:\n${history}\n\nReply as the host ${hostName}:`,
-          },
-        ],
-        temperature: 0.8,
-        // reasoning models spend tokens thinking before the reply
-        max_tokens: 500,
-      }),
-    });
-
-    if (!response.ok) throw new Error('AI error');
-    const data: any = await response.json();
-    const raw = data.choices?.[0]?.message?.content || '';
-    const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    return cleaned || CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
+    const reply = await chatCompletion(
+      [
+        {
+          role: 'system',
+          content: `You are ${hostName}, a friendly and helpful vacation rental host. Reply to the guest's message naturally and helpfully. Keep responses short (1-3 sentences). Be warm, welcoming, and specific. Don't use emojis excessively.`,
+        },
+        {
+          role: 'user',
+          content: `Conversation so far:\n${history}\n\nReply as the host ${hostName}:${NO_THINK}`,
+        },
+      ],
+      { temperature: 0.8, maxTokens: 200 },
+    );
+    return reply || CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
   } catch {
     return CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
   }
@@ -159,6 +142,7 @@ export async function getMessages(req: AuthRequest, res: Response): Promise<void
 
   res.json({
     messages: messages.reverse(),
+    hostTyping: pendingReplies.has(conversationId),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 }
@@ -191,18 +175,17 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     },
   });
 
-  // Auto-reply after 3-5 seconds via the local model (async, don't await)
+  // Auto-reply after 3-5 seconds using OpenAI (async, don't await)
   const otherParticipant = await prisma.conversationParticipant.findFirst({
     where: { conversationId, userId: { not: req.userId! } },
     include: { user: { select: { firstName: true } } },
   });
   if (otherParticipant) {
-    const delay = 3000 + Math.random() * 2000;
+    const delay = 1500 + Math.random() * 1500;
     const hostName = otherParticipant.user.firstName;
+    pendingReplies.set(conversationId, Date.now());
     setTimeout(async () => {
       try {
-        // Local model is always available; canned replies remain the
-        // fallback inside generateAIReply if the call fails
         const reply = await generateAIReply(conversationId, parsed.data.content, hostName);
         await prisma.message.create({
           data: {
@@ -213,6 +196,8 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
         });
       } catch (err) {
         console.error('Auto-reply failed:', err);
+      } finally {
+        pendingReplies.delete(conversationId);
       }
     }, delay);
   }

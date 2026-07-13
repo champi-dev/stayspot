@@ -346,6 +346,7 @@ class _FilterModalState extends ConsumerState<_FilterModal> {
     _priceRange = RangeValues(filters.minPrice, filters.maxPrice);
     _propertyType = filters.propertyType;
     _guests = filters.guests;
+    _selectedAmenities.addAll(filters.amenities);
   }
 
   static const _amenities = [
@@ -369,6 +370,7 @@ class _FilterModalState extends ConsumerState<_FilterModal> {
           maxPrice: _priceRange.end,
           propertyType: _propertyType,
           guests: _guests,
+          amenities: _selectedAmenities.toList(),
         );
     Navigator.of(context).pop();
   }

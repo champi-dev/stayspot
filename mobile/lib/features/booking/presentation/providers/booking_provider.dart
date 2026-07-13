@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stayspot/core/notifications_service.dart';
 import 'package:stayspot/features/booking/data/booking_repository.dart';
 
 class BookingState {
@@ -43,6 +44,14 @@ class BookingNotifier extends StateNotifier<BookingState> {
         past: result.past,
         isLoading: false,
       );
+      // Keep an on-device reminder scheduled for every upcoming trip
+      for (final booking in result.upcoming) {
+        NotificationsService.instance.scheduleTripReminder(
+          bookingId: booking.id,
+          listingTitle: booking.listing?.title ?? 'your stay',
+          checkIn: booking.checkIn,
+        );
+      }
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Failed to load bookings');
     }
@@ -72,6 +81,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
   Future<bool> cancelBooking(String bookingId) async {
     try {
       await _repository.cancelBooking(bookingId);
+      NotificationsService.instance.cancelTripReminder(bookingId);
       await loadBookings();
       return true;
     } catch (_) {

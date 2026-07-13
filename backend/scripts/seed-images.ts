@@ -6,6 +6,9 @@ dotenv.config();
 
 const LEONARDO_API_KEY = process.env.LEONARDO_API_KEY || '';
 const BASE_URL = 'https://cloud.leonardo.ai/api/rest/v1';
+const BASE_URL_V2 = 'https://cloud.leonardo.ai/api/rest/v2';
+// Nano Banana = Gemini 2.5 Flash Image
+const MODEL = 'gemini-2.5-flash-image';
 const IMAGES_DIR = path.join(__dirname, '..', 'uploads', 'images');
 
 const CATEGORIES = [
@@ -50,19 +53,23 @@ async function sleep(ms: number) {
 }
 
 async function createGeneration(prompt: string, numImages: number = 1): Promise<string> {
-  const response = await fetch(`${BASE_URL}/generations`, {
+  const response = await fetch(`${BASE_URL_V2}/generations`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${LEONARDO_API_KEY}`,
       'Content-Type': 'application/json',
+      accept: 'application/json',
     },
     body: JSON.stringify({
-      prompt,
-      num_images: numImages,
-      width: 1024,
-      height: 768,
-      guidance_scale: 7,
-      negative_prompt: 'blurry, low quality, text, watermark, people, person, human, cartoon, illustration, painting, drawing',
+      model: MODEL,
+      parameters: {
+        width: 1024,
+        height: 768,
+        prompt,
+        quantity: numImages,
+        prompt_enhance: 'OFF',
+      },
+      public: false,
     }),
   });
 
@@ -72,7 +79,10 @@ async function createGeneration(prompt: string, numImages: number = 1): Promise<
   }
 
   const data: any = await response.json();
-  return data.sdGenerationJob.generationId;
+  if (Array.isArray(data)) {
+    throw new Error(`Leonardo error: ${data[0]?.message ?? 'unknown'}`);
+  }
+  return data.generate.generationId;
 }
 
 async function waitForGeneration(generationId: string, maxWait: number = 120000): Promise<string[]> {

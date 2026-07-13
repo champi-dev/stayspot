@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stayspot/app/router.dart';
 import 'package:stayspot/app/theme.dart';
+import 'package:stayspot/core/notifications_service.dart';
 import 'package:stayspot/features/auth/presentation/providers/auth_provider.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  NotificationsService.instance.init();
   runApp(const ProviderScope(child: StaySpotApp()));
 }
 

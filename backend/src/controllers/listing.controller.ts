@@ -10,6 +10,7 @@ export async function searchListings(req: Request, res: Response): Promise<void>
     maxPrice,
     propertyType,
     guests,
+    amenities,
     page = '1',
     limit = '20',
   } = req.query;
@@ -24,6 +25,10 @@ export async function searchListings(req: Request, res: Response): Promise<void>
   if (maxPrice) where.pricePerNight = { ...where.pricePerNight as any, lte: parseFloat(String(maxPrice)) };
   if (propertyType) where.propertyType = String(propertyType) as PropertyType;
   if (guests) where.maxGuests = { gte: parseInt(String(guests), 10) };
+  if (amenities) {
+    const list = String(amenities).split(',').map(a => a.trim()).filter(Boolean);
+    if (list.length > 0) where.amenities = { hasEvery: list };
+  }
 
   const [listings, total] = await Promise.all([
     prisma.listing.findMany({

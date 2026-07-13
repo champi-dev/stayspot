@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { autocomplete, getPlaceDetails } from '../services/google-places.service';
+import { autocomplete, getPlaceDetails } from '../services/places.service';
 import { generateListingsForLocation } from '../services/listing-generation.service';
 
 const prisma = new PrismaClient();

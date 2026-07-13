@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stayspot/core/notifications_service.dart';
 import 'package:stayspot/features/inbox/data/inbox_repository.dart';
 
 class InboxState {
@@ -35,13 +37,19 @@ class InboxNotifier extends StateNotifier<InboxState> {
 class ChatState {
   final List<MessageModel> messages;
   final bool isLoading;
+  final bool hostTyping;
 
-  const ChatState({this.messages = const [], this.isLoading = false});
+  const ChatState({
+    this.messages = const [],
+    this.isLoading = false,
+    this.hostTyping = false,
+  });
 
-  ChatState copyWith({List<MessageModel>? messages, bool? isLoading}) {
+  ChatState copyWith({List<MessageModel>? messages, bool? isLoading, bool? hostTyping}) {
     return ChatState(
       messages: messages ?? this.messages,
       isLoading: isLoading ?? this.isLoading,
+      hostTyping: hostTyping ?? this.hostTyping,
     );
   }
 }
@@ -50,21 +58,51 @@ class ChatNotifier extends StateNotifier<ChatState> {
   final InboxRepository _repository;
   final String conversationId;
   Timer? _pollTimer;
+  String? _ownUserId;
 
   ChatNotifier(this._repository, this.conversationId) : super(const ChatState());
 
   Future<void> loadMessages() async {
     state = state.copyWith(isLoading: true);
     try {
-      final messages = await _repository.getMessages(conversationId);
-      state = state.copyWith(messages: messages, isLoading: false);
+      final result = await _repository.getMessages(conversationId);
+      final previousIds = state.messages.map((m) => m.id).toSet();
+      state = state.copyWith(
+        messages: result.messages,
+        isLoading: false,
+        hostTyping: result.hostTyping,
+      );
+      // Notify about host messages that arrived while the app is backgrounded
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (previousIds.isNotEmpty && lifecycle != AppLifecycleState.resumed) {
+        for (final m in result.messages) {
+          if (!previousIds.contains(m.id) && m.sender.id != _ownUserId) {
+            NotificationsService.instance
+                .showHostMessage(m.sender.firstName, m.content);
+          }
+        }
+      }
+      // Poll fast while the host reply is generating so the typing
+      // indicator and the reply itself feel live
+      _setPollInterval(result.hostTyping
+          ? const Duration(milliseconds: 1500)
+          : const Duration(seconds: 5));
     } catch (_) {
       state = state.copyWith(isLoading: false);
     }
   }
 
+  Duration? _currentInterval;
+
+  void _setPollInterval(Duration interval) {
+    if (_currentInterval == interval) return;
+    _currentInterval = interval;
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(interval, (_) => loadMessages());
+  }
+
   void startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => loadMessages());
+    _setPollInterval(const Duration(seconds: 5));
   }
 
   void stopPolling() {
@@ -74,7 +112,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
   Future<void> sendMessage(String content) async {
     try {
       final message = await _repository.sendMessage(conversationId, content);
-      state = state.copyWith(messages: [...state.messages, message]);
+      _ownUserId = message.sender.id;
+      state = state.copyWith(messages: [...state.messages, message], hostTyping: true);
+      // The server schedules the host auto-reply right away
+      _setPollInterval(const Duration(milliseconds: 1500));
     } catch (_) {}
   }
 

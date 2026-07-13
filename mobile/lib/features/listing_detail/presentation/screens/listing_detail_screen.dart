@@ -2,14 +2,56 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:stayspot/app/theme.dart';
 import 'package:stayspot/core/constants.dart';
 import 'package:stayspot/features/auth/presentation/providers/auth_provider.dart';
+import 'package:stayspot/features/listing_detail/data/listing_detail_repository.dart';
 import 'package:stayspot/features/listing_detail/presentation/providers/listing_detail_provider.dart';
 import 'package:stayspot/features/wishlists/presentation/providers/wishlist_provider.dart';
 import 'package:stayspot/features/wishlists/presentation/widgets/save_to_wishlist_sheet.dart';
 import 'package:stayspot/shared/models/listing_model.dart';
+
+const amenityIcons = <String, IconData>{
+  'wifi': Icons.wifi,
+  'kitchen': Icons.kitchen,
+  'pool': Icons.pool,
+  'parking': Icons.local_parking,
+  'ac': Icons.ac_unit,
+  'washer': Icons.local_laundry_service,
+  'dryer': Icons.dry_cleaning,
+  'gym': Icons.fitness_center,
+  'hot_tub': Icons.hot_tub,
+  'fireplace': Icons.fireplace,
+  'workspace': Icons.desktop_windows,
+  'tv': Icons.tv,
+  'balcony': Icons.balcony,
+  'garden': Icons.yard,
+  'bbq': Icons.outdoor_grill,
+  'elevator': Icons.elevator,
+  'doorman': Icons.security,
+};
+
+const amenityLabels = <String, String>{
+  'wifi': 'Wifi',
+  'kitchen': 'Kitchen',
+  'pool': 'Pool',
+  'parking': 'Free parking',
+  'ac': 'Air conditioning',
+  'washer': 'Washer',
+  'dryer': 'Dryer',
+  'gym': 'Gym',
+  'hot_tub': 'Hot tub',
+  'fireplace': 'Fireplace',
+  'workspace': 'Dedicated workspace',
+  'tv': 'TV',
+  'balcony': 'Balcony',
+  'garden': 'Garden',
+  'bbq': 'BBQ grill',
+  'elevator': 'Elevator',
+  'doorman': 'Doorman',
+};
 
 class ListingDetailScreen extends ConsumerWidget {
   final String listingId;
@@ -331,46 +373,6 @@ class ListingDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildAmenities(BuildContext context, ListingModel listing) {
-    const amenityIcons = <String, IconData>{
-      'wifi': Icons.wifi,
-      'kitchen': Icons.kitchen,
-      'pool': Icons.pool,
-      'parking': Icons.local_parking,
-      'ac': Icons.ac_unit,
-      'washer': Icons.local_laundry_service,
-      'dryer': Icons.dry_cleaning,
-      'gym': Icons.fitness_center,
-      'hot_tub': Icons.hot_tub,
-      'fireplace': Icons.fireplace,
-      'workspace': Icons.desktop_windows,
-      'tv': Icons.tv,
-      'balcony': Icons.balcony,
-      'garden': Icons.yard,
-      'bbq': Icons.outdoor_grill,
-      'elevator': Icons.elevator,
-      'doorman': Icons.security,
-    };
-
-    const amenityLabels = <String, String>{
-      'wifi': 'Wifi',
-      'kitchen': 'Kitchen',
-      'pool': 'Pool',
-      'parking': 'Free parking',
-      'ac': 'Air conditioning',
-      'washer': 'Washer',
-      'dryer': 'Dryer',
-      'gym': 'Gym',
-      'hot_tub': 'Hot tub',
-      'fireplace': 'Fireplace',
-      'workspace': 'Dedicated workspace',
-      'tv': 'TV',
-      'balcony': 'Balcony',
-      'garden': 'Garden',
-      'bbq': 'BBQ grill',
-      'elevator': 'Elevator',
-      'doorman': 'Doorman',
-    };
-
     final displayAmenities = listing.amenities.take(8).toList();
 
     return Column(
@@ -400,7 +402,7 @@ class ListingDetailScreen extends ConsumerWidget {
             )),
         if (listing.amenities.length > 8)
           TextButton(
-            onPressed: () {},
+            onPressed: () => _showAllAmenities(context, listing),
             child: Text(
               'Show all ${listing.amenities.length} amenities',
               style: const TextStyle(
@@ -448,7 +450,7 @@ class ListingDetailScreen extends ConsumerWidget {
         ...state.reviews.take(2).map((review) => _buildReviewCard(review)),
         if (state.totalReviews > 2)
           OutlinedButton(
-            onPressed: () {},
+            onPressed: () => _showAllReviews(context, listing.id, state.totalReviews),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
               side: const BorderSide(color: AppColors.textPrimary),
@@ -584,24 +586,36 @@ class ListingDetailScreen extends ConsumerWidget {
           borderRadius: BorderRadius.circular(AppRadius.card),
           child: SizedBox(
             height: 200,
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: LatLng(listing.latitude, listing.longitude),
-                zoom: 14,
-              ),
-              markers: {
-                Marker(
-                  markerId: MarkerId(listing.id),
-                  position: LatLng(listing.latitude, listing.longitude),
-                  infoWindow: InfoWindow(title: listing.title),
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: LatLng(listing.latitude, listing.longitude),
+                initialZoom: 14,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.none,
                 ),
-              },
-              zoomControlsEnabled: false,
-              scrollGesturesEnabled: false,
-              rotateGesturesEnabled: false,
-              tiltGesturesEnabled: false,
-              myLocationButtonEnabled: false,
-              liteModeEnabled: false,
+              ),
+              children: [
+                TileLayer(
+                  // Free CARTO Voyager tiles over OpenStreetMap data
+                  urlTemplate:
+                      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+                  userAgentPackageName: 'com.stayspot.stayspot',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(listing.latitude, listing.longitude),
+                      width: 44,
+                      height: 44,
+                      child: const Icon(Icons.location_pin,
+                          size: 44, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+                const SimpleAttributionWidget(
+                  source: Text('© OpenStreetMap © CARTO'),
+                ),
+              ],
             ),
           ),
         ),
@@ -614,11 +628,213 @@ class ListingDetailScreen extends ConsumerWidget {
     );
   }
 
+  void _showAllReviews(BuildContext context, String listingId, int total) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _AllReviewsSheet(listingId: listingId, total: total),
+    );
+  }
+
+  void _showAllAmenities(BuildContext context, ListingModel listing) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('What this place offers',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: listing.amenities
+                      .map((a) => Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Row(
+                              children: [
+                                Icon(amenityIcons[a] ?? Icons.check,
+                                    size: 22, color: AppColors.textPrimary),
+                                const SizedBox(width: 14),
+                                Text(amenityLabels[a] ?? a,
+                                    style: const TextStyle(fontSize: 16)),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatReviewDate(DateTime date) {
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
     return '${months[date.month - 1]} ${date.year}';
+  }
+}
+
+
+/// Bottom sheet listing every review with incremental loading.
+class _AllReviewsSheet extends StatefulWidget {
+  final String listingId;
+  final int total;
+
+  const _AllReviewsSheet({required this.listingId, required this.total});
+
+  @override
+  State<_AllReviewsSheet> createState() => _AllReviewsSheetState();
+}
+
+class _AllReviewsSheetState extends State<_AllReviewsSheet> {
+  final _repository = ListingDetailRepository();
+  final List<dynamic> _reviews = [];
+  int _page = 1;
+  bool _loading = false;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _done) return;
+    setState(() => _loading = true);
+    try {
+      final result =
+          await _repository.getReviews(widget.listingId, page: _page, limit: 20);
+      setState(() {
+        _reviews.addAll(result.reviews);
+        _page++;
+        _done = _reviews.length >= result.total || result.reviews.isEmpty;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('${widget.total} reviews',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (n) {
+                    if (n.metrics.pixels > n.metrics.maxScrollExtent - 300) {
+                      _loadMore();
+                    }
+                    return false;
+                  },
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _reviews.length + (_done ? 0 : 1),
+                    itemBuilder: (context, index) {
+                      if (index >= _reviews.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: CircularProgressIndicator(color: AppColors.primary),
+                          ),
+                        );
+                      }
+                      final review = _reviews[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: AppColors.surface,
+                                  child: Text(
+                                    review.author.firstName[0],
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(review.author.fullName,
+                                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.star,
+                                            size: 12, color: AppColors.star),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          review.rating.toStringAsFixed(1),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(review.comment,
+                                style: const TextStyle(fontSize: 14, height: 1.5)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

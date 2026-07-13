@@ -1,7 +1,7 @@
 name: stayspot
 description: "StaySpot - Airbnb Clone"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.10.8
@@ -39,11 +39,14 @@ dependencies:
   form_builder_validators: ^11.1.0
 
   # Maps
-  google_maps_flutter: ^2.10.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
   # Utils
   intl: ^0.20.2
   shimmer: ^3.0.0
+  flutter_local_notifications: ^22.0.1
+  timezone: ^0.11.1
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +56,13 @@ dev_dependencies:
   build_runner: ^2.4.14
   custom_lint: ^0.7.5
   riverpod_lint: ^2.6.3
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "/Users/champi/Development/open_source_mobile_apps/icons/processed/stayspot.png"

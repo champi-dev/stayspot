@@ -30,6 +30,7 @@ class ExploreRepository {
     double? maxPrice,
     String? propertyType,
     int? guests,
+    List<String>? amenities,
     int page = 1,
     int limit = 20,
   }) async {
@@ -42,6 +43,9 @@ class ExploreRepository {
     if (maxPrice != null) params['maxPrice'] = maxPrice;
     if (propertyType != null) params['propertyType'] = propertyType;
     if (guests != null) params['guests'] = guests;
+    if (amenities != null && amenities.isNotEmpty) {
+      params['amenities'] = amenities.join(',');
+    }
 
     final response = await _api.dio.get('/listings', queryParameters: params);
     final data = response.data;
