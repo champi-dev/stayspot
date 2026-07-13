@@ -31,8 +31,11 @@ Seeded: 14 users, 32 listings across multiple cities.
 
 - `DATABASE_URL` — set in compose to the postgis container
 - `JWT_SECRET` / `JWT_REFRESH_SECRET` — dev defaults; set for production
+- `AI_BASE_URL` / `AI_MODEL` — host chat auto-replies (defaults: host
+  Ollama, qwen3:1.7b; canned replies if the model is unreachable)
 - `GOOGLE_PLACES_API_KEY` — optional, location autocomplete
-- `OPENAI_API_KEY` — optional, AI listing generation
+- `OPENAI_API_KEY` — optional, AI listing generation (reviews/listings
+  still use OpenAI when set; falls back to templates without it)
 
 ## Demo account
 

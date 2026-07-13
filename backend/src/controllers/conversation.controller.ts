@@ -14,7 +14,12 @@ const sendMessageSchema = z.object({
   content: z.string().min(1),
 });
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+// Any OpenAI-compatible chat completions API — defaults to local
+// Ollama running qwen3:1.7b. Point AI_BASE_URL at api.openai.com/v1
+// and set AI_API_KEY to use a hosted model instead.
+const AI_BASE_URL = (process.env.AI_BASE_URL || 'http://localhost:11434/v1').replace(/\/$/, '');
+const AI_MODEL = process.env.AI_MODEL || 'qwen3:1.7b';
+const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || 'ollama';
 
 const CANNED_REPLIES = [
   "Thanks for reaching out! I'd be happy to help. The place is available for those dates.",
@@ -39,18 +44,18 @@ async function generateAIReply(conversationId: string, guestMessage: string, hos
   ).join('\n');
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(`${AI_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${AI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: AI_MODEL,
         messages: [
           {
             role: 'system',
-            content: `You are ${hostName}, a friendly and helpful Airbnb host. Reply to the guest's message naturally and helpfully. Keep responses short (1-3 sentences). Be warm, welcoming, and specific. Don't use emojis excessively.`,
+            content: `You are ${hostName}, a friendly and helpful Airbnb host. Reply to the guest's message naturally and helpfully. Keep responses short (1-3 sentences). Be warm, welcoming, and specific. Don't use emojis excessively. /no_think`,
           },
           {
             role: 'user',
@@ -58,13 +63,16 @@ async function generateAIReply(conversationId: string, guestMessage: string, hos
           },
         ],
         temperature: 0.8,
-        max_tokens: 150,
+        // reasoning models spend tokens thinking before the reply
+        max_tokens: 500,
       }),
     });
 
-    if (!response.ok) throw new Error('OpenAI error');
+    if (!response.ok) throw new Error('AI error');
     const data: any = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
+    const raw = data.choices?.[0]?.message?.content || '';
+    const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return cleaned || CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
   } catch {
     return CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
   }
@@ -183,7 +191,7 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     },
   });
 
-  // Auto-reply after 3-5 seconds using OpenAI (async, don't await)
+  // Auto-reply after 3-5 seconds via the local model (async, don't await)
   const otherParticipant = await prisma.conversationParticipant.findFirst({
     where: { conversationId, userId: { not: req.userId! } },
     include: { user: { select: { firstName: true } } },
@@ -193,10 +201,9 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     const hostName = otherParticipant.user.firstName;
     setTimeout(async () => {
       try {
-        const useAI = OPENAI_API_KEY && OPENAI_API_KEY !== 'sk-placeholder';
-        const reply = useAI
-          ? await generateAIReply(conversationId, parsed.data.content, hostName)
-          : CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
+        // Local model is always available; canned replies remain the
+        // fallback inside generateAIReply if the call fails
+        const reply = await generateAIReply(conversationId, parsed.data.content, hostName);
         await prisma.message.create({
           data: {
             content: reply,
