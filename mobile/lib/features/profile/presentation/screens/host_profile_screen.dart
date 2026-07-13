@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:stayspot/shared/widgets/app_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stayspot/app/theme.dart';
 import 'package:stayspot/core/api_client.dart';
@@ -161,10 +161,8 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
                           ClipRRect(
                             borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
                             child: imageUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: '${ApiConstants.imageBaseUrl}$imageUrl',
+                                ? AppNetworkImage('${ApiConstants.imageBaseUrl}$imageUrl',
                                     width: 100, height: 100, fit: BoxFit.cover,
-                                    errorWidget: (_, _, _) => Container(width: 100, height: 100, color: AppColors.surface),
                                   )
                                 : Container(width: 100, height: 100, color: AppColors.surface),
                           ),

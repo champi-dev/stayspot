@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:stayspot/shared/widgets/app_network_image.dart';
 import 'package:stayspot/app/theme.dart';
 import 'package:stayspot/core/constants.dart';
 import 'package:stayspot/shared/models/listing_model.dart';
@@ -59,22 +59,7 @@ class _ListingCardState extends State<ListingCard> {
                           onPageChanged: (i) => setState(() => _currentImageIndex = i),
                           itemBuilder: (context, index) {
                             final imageUrl = '${ApiConstants.imageBaseUrl}${listing.images[index].url}';
-                            return CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: AppColors.surface,
-                                child: const Center(
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textTertiary),
-                                ),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: AppColors.surface,
-                                child: const Center(
-                                  child: Icon(Icons.image_not_supported, size: 48, color: AppColors.textTertiary),
-                                ),
-                              ),
-                            );
+                            return AppNetworkImage(imageUrl);
                           },
                         )
                       else

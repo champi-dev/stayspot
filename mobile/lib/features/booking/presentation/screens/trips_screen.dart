@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:stayspot/shared/widgets/app_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stayspot/app/theme.dart';
@@ -150,15 +150,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen> with SingleTickerProv
           ClipRRect(
             borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
             child: booking.listing?.imageUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: '${ApiConstants.imageBaseUrl}${booking.listing!.imageUrl}',
+                ? AppNetworkImage('${ApiConstants.imageBaseUrl}${booking.listing!.imageUrl}',
                     width: 120,
                     height: 120,
                     fit: BoxFit.cover,
-                    errorWidget: (_, _, _) => Container(
-                      width: 120, height: 120, color: AppColors.surface,
-                      child: const Icon(Icons.home, size: 32, color: AppColors.textTertiary),
-                    ),
                   )
                 : Container(
                     width: 120, height: 120, color: AppColors.surface,

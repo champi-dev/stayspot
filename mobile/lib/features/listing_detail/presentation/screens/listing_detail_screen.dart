@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:stayspot/shared/widgets/app_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -142,21 +142,8 @@ class ListingDetailScreen extends ConsumerWidget {
                           itemCount: listing.images.length,
                           itemBuilder: (context, index) {
                             final imageUrl = '${ApiConstants.imageBaseUrl}${listing.images[index].url}';
-                            return CachedNetworkImage(
-                              imageUrl: imageUrl,
+                            return AppNetworkImage(imageUrl,
                               fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: AppColors.surface,
-                                child: const Center(
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textTertiary),
-                                ),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: AppColors.surface,
-                                child: const Center(
-                                  child: Icon(Icons.image_not_supported, size: 64, color: AppColors.textTertiary),
-                                ),
-                              ),
                             );
                           },
                         )

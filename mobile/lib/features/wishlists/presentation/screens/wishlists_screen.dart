@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:stayspot/shared/widgets/app_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:stayspot/app/theme.dart';
@@ -110,11 +110,9 @@ class _WishlistsScreenState extends ConsumerState<WishlistsScreen> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.card),
                   child: wishlist.coverImage != null
-                      ? CachedNetworkImage(
-                          imageUrl: '${ApiConstants.imageBaseUrl}${wishlist.coverImage}',
+                      ? AppNetworkImage('${ApiConstants.imageBaseUrl}${wishlist.coverImage}',
                           fit: BoxFit.cover,
                           width: double.infinity,
-                          errorWidget: (_, _, _) => _placeholderCover(),
                         )
                       : _placeholderCover(),
                 ),
@@ -203,15 +201,10 @@ class _WishlistDetailSheet extends StatelessWidget {
                         ClipRRect(
                           borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
                           child: listing.imageUrl != null
-                              ? CachedNetworkImage(
-                                  imageUrl: '${ApiConstants.imageBaseUrl}${listing.imageUrl}',
+                              ? AppNetworkImage('${ApiConstants.imageBaseUrl}${listing.imageUrl}',
                                   width: 100,
                                   height: 100,
                                   fit: BoxFit.cover,
-                                  errorWidget: (_, _, _) => Container(
-                                    width: 100, height: 100, color: AppColors.surface,
-                                    child: const Icon(Icons.home, color: AppColors.textTertiary),
-                                  ),
                                 )
                               : Container(
                                   width: 100, height: 100, color: AppColors.surface,

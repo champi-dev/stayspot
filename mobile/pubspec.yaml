@@ -1,7 +1,7 @@
 name: stayspot
 description: "StaySpot - Airbnb Clone"
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: ^3.10.8
@@ -26,7 +26,6 @@ dependencies:
   shared_preferences: ^2.3.4
 
   # Image Caching
-  cached_network_image: ^3.4.1
 
   # Animations
   flutter_animate: ^4.5.2
