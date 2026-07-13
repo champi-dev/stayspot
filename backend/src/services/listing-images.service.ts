@@ -13,7 +13,9 @@ const V2 = 'https://cloud.leonardo.ai/api/rest/v2';
 const V1 = 'https://cloud.leonardo.ai/api/rest/v1';
 const MODEL = 'gemini-2.5-flash-image'; // Nano Banana
 
-const IMAGES_DIR = path.join(__dirname, '..', '..', 'uploads', 'images');
+// cwd-based: compiled __dirname would resolve inside dist/ and miss
+// the mounted uploads/ volume (same fix as the /images static path)
+const IMAGES_DIR = path.resolve(process.cwd(), 'uploads', 'images');
 
 const VIEWS = [
   'wide shot of the living area',
