@@ -23,7 +23,9 @@ const generationLimiter = rateLimit({
 app.use('/api/v1/locations/:placeId', generationLimiter);
 
 // Serve uploaded images as static files
-app.use('/images', express.static(path.join(__dirname, '..', 'uploads', 'images')));
+// cwd-based so it works from source (dev) and compiled dist (docker):
+// __dirname-relative resolved to dist/uploads and 404'd in production
+app.use('/images', express.static(path.resolve(process.cwd(), 'uploads', 'images')));
 
 // Health check
 app.get('/health', (_req, res) => {
