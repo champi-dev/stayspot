@@ -33,6 +33,11 @@ app.get('/health', (_req, res) => {
 });
 
 // API routes
+// App-store requirement: privacy policy reachable in a browser
+app.get('/privacy', (_req, res) =>
+  res.sendFile(path.resolve(process.cwd(), 'public', 'privacy.html'))
+);
+
 app.use('/api/v1', router);
 
 // Start server
