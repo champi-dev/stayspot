@@ -11,7 +11,9 @@ const prisma = new PrismaClient();
 const LEONARDO_API_KEY = process.env.LEONARDO_API_KEY || '';
 const V2 = 'https://cloud.leonardo.ai/api/rest/v2';
 const V1 = 'https://cloud.leonardo.ai/api/rest/v1';
-const MODEL = 'gemini-2.5-flash-image'; // Nano Banana
+// Default Nano Banana; set LEONARDO_MODEL to a stronger model if the
+// account has one (e.g. gemini-3-pro-image / Nano Banana Pro, lucid-origin).
+const MODEL = process.env.LEONARDO_MODEL || 'gemini-2.5-flash-image';
 
 // cwd-based: compiled __dirname would resolve inside dist/ and miss
 // the mounted uploads/ volume (same fix as the /images static path)
@@ -21,7 +23,7 @@ const VIEWS = [
   'wide shot of the living area',
   'bedroom interior',
   'kitchen and dining area',
-  'exterior or balcony view',
+  'exterior facade or balcony, with the surrounding neighborhood visible',
 ];
 
 export function imagesEnabled(): boolean {
@@ -94,12 +96,17 @@ export async function generateListingImages(
   title: string,
   description: string,
   locationName: string,
+  imagePrompt?: string,
 ): Promise<void> {
   if (!imagesEnabled()) return;
 
+  const visual = imagePrompt || description;
   const basePrompt =
-    `Professional real estate photography of "${title}" in ${locationName}. ` +
-    `${description} Photorealistic, natural light, editorial quality, no people, no text.`;
+    `Professional real estate photography of "${title}", a rental property in ${locationName}. ` +
+    `${visual} ` +
+    `The architecture, building materials, furnishings, vegetation and any view through windows must be authentic to ${locationName} — ` +
+    `local building style and era, not a generic property. ` +
+    `Photorealistic, natural light, editorial quality, no people, no text, no watermarks.`;
 
   const created: { url: string; sortOrder: number }[] = [];
 

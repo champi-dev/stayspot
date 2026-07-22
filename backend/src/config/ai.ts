@@ -20,6 +20,42 @@ export interface ChatMessage {
   content: string;
 }
 
+// OpenAI is used for content that needs real-world knowledge of places
+// (listing descriptions, neighborhoods, reviews); the local qwen3 stays
+// for latency-sensitive chat replies.
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+export const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1';
+
+export function openaiEnabled(): boolean {
+  return Boolean(OPENAI_API_KEY && OPENAI_API_KEY.startsWith('sk-') && OPENAI_API_KEY.length > 20);
+}
+
+/** Chat completion against OpenAI; falls back to the local model if no key. */
+export async function knowledgeCompletion(
+  messages: ChatMessage[],
+  opts: { temperature?: number; maxTokens?: number } = {},
+): Promise<string> {
+  if (!openaiEnabled()) return chatCompletion(messages, opts);
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages,
+      temperature: opts.temperature ?? 0.8,
+      max_tokens: opts.maxTokens ?? 2048,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`OpenAI request failed: ${response.status} ${await response.text()}`);
+  }
+  const data: any = await response.json();
+  return cleanReply(data.choices?.[0]?.message?.content);
+}
+
 export async function chatCompletion(
   messages: ChatMessage[],
   opts: { temperature?: number; maxTokens?: number } = {},

@@ -1,6 +1,6 @@
 import { PrismaClient, PropertyType } from '@prisma/client';
 import { z } from 'zod';
-import { chatCompletion, extractJson, NO_THINK } from '../config/ai';
+import { knowledgeCompletion, openaiEnabled, extractJson, NO_THINK } from '../config/ai';
 import { generateListingImages, imagesEnabled } from './listing-images.service';
 
 const prisma = new PrismaClient();
@@ -19,6 +19,7 @@ const generatedListingSchema = z.object({
   neighborhoodDesc: z.string(),
   hostName: z.string(),
   hostBio: z.string(),
+  imagePrompt: z.string().optional(),
 });
 
 const generatedReviewSchema = z.object({
@@ -114,9 +115,9 @@ async function saveListing(
     },
   });
 
-  // Unique photos via Leonardo Nano Banana, replacing preseeded ones (background)
+  // Unique photos via Leonardo, replacing preseeded ones (background)
   if (imagesEnabled()) {
-    generateListingImages(created.id, listing.title, listing.description, locationName)
+    generateListingImages(created.id, listing.title, listing.description, locationName, listing.imagePrompt)
       .catch(err => console.error('Image gen failed:', err));
   }
 
@@ -138,6 +139,7 @@ export async function generateListingsForLocation(
 ): Promise<void> {
   const imagesByCategory = await getImageMap();
   const usedImagePaths = new Set<string>();
+  const fullLocation = `${locationName}, ${country}`;
 
   // FAST PATH: 5 listings for a quick first response (qwen3 local, with
   // hand-written fallback if the model output is unusable)
@@ -155,7 +157,7 @@ export async function generateListingsForLocation(
     );
   }
   await Promise.all(fastListings.map(l =>
-    saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory, usedImagePaths)
+    saveListing(l, locationId, fullLocation, lat, lng, hostIds, imagesByCategory, usedImagePaths)
   ));
   console.log(`[Gen] Fast batch done. Queuing background batch...`);
 
@@ -163,7 +165,7 @@ export async function generateListingsForLocation(
   generateViaAI(locationName, country, 3).then(async (moreListings) => {
     console.log(`[Gen] Background batch: ${moreListings.length} more for ${locationName}`);
     await Promise.all(moreListings.map(l =>
-      saveListing(l, locationId, locationName, lat, lng, hostIds, imagesByCategory, usedImagePaths)
+      saveListing(l, locationId, fullLocation, lat, lng, hostIds, imagesByCategory, usedImagePaths)
     ));
     console.log(`[Gen] Background batch complete for ${locationName}`);
   }).catch(err => {
@@ -176,16 +178,18 @@ async function generateViaAI(
   country: string,
   count: number,
 ): Promise<z.infer<typeof generatedListingSchema>[]> {
-  const systemPrompt = `You are a creative real estate copywriter generating property listings for a travel platform. Generate realistic, diverse listings for the specified location. Each listing must feel authentic to the local culture and pricing norms.\n\nRespond ONLY with a valid JSON array. No markdown, no explanation.`;
+  const systemPrompt = `You are a travel expert and real estate copywriter with deep first-hand knowledge of cities worldwide. Generate realistic, diverse property listings for the specified location. Everything must be geographically accurate: use REAL neighborhoods, streets, landmarks, and local architectural styles of that exact city — never invent places, and never reuse generic phrases across listings.\n\nRespond ONLY with a valid JSON array. No markdown, no explanation.`;
 
   const userPrompt = `Generate ${count} property listings for ${locationName}, ${country}.
 
 Requirements:
-- Mix of property types: apartments, houses, unique stays
+- Mix of property types: apartments, houses, unique stays typical of ${locationName} specifically
 - Prices realistic for ${locationName} in USD per night
 - Each listing has 4-8 amenities from: wifi, kitchen, pool, parking, ac, washer, dryer, gym, hot_tub, fireplace, workspace, tv, balcony, garden, bbq, elevator, doorman
-- Titles should be catchy, 5-10 words
-- Descriptions 2-3 sentences, mention neighborhood
+- Titles catchy, 5-10 words, may reference a real neighborhood or landmark
+- Descriptions 2-3 sentences naming a REAL neighborhood of ${locationName} and a real nearby landmark, attraction, or transit stop, plus what the property looks like (materials, era, style typical of that neighborhood)
+- neighborhoodDesc must describe the actual character of that real neighborhood
+- imagePrompt: 1-2 sentences for a photo generator describing the property's interior/exterior with visually accurate local detail (architecture style, building era, materials, furnishing style, what would be visible out the window in that part of ${locationName})
 - Rating between 4.0-5.0 (weighted toward 4.3-4.8)
 
 JSON schema for each listing:
@@ -202,13 +206,14 @@ JSON schema for each listing:
   "houseRules": string[] (2-4 rules),
   "neighborhoodDesc": string (1-2 sentences),
   "hostName": string (local-sounding name),
-  "hostBio": string (1-2 sentences)
+  "hostBio": string (1-2 sentences),
+  "imagePrompt": string
 }`;
 
-  const content = await chatCompletion(
+  const content = await knowledgeCompletion(
     [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt + NO_THINK },
+      { role: 'user', content: userPrompt + (openaiEnabled() ? '' : NO_THINK) },
     ],
     { temperature: 0.8, maxTokens: 3000 },
   );
@@ -251,8 +256,8 @@ Each review JSON:
 Respond ONLY with a valid JSON array.`;
 
   try {
-    const content = await chatCompletion(
-      [{ role: 'user', content: prompt + NO_THINK }],
+    const content = await knowledgeCompletion(
+      [{ role: 'user', content: prompt + (openaiEnabled() ? '' : NO_THINK) }],
       { temperature: 0.8, maxTokens: 1500 },
     );
 
